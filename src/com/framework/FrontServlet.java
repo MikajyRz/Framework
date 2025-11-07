@@ -4,6 +4,7 @@ import java.io.*;
 import java.util.*;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
+import jakarta.servlet.RequestDispatcher;
 
 public class FrontServlet extends HttpServlet {
     private static final List<String> INDEX_FILES = Arrays.asList(
@@ -15,6 +16,21 @@ public class FrontServlet extends HttpServlet {
             throws ServletException, IOException {
 
         String path = req.getRequestURI().substring(req.getContextPath().length());
+
+        // If UrlTestServlet has a mapping for this path, forward to it
+        Object attr = getServletContext().getAttribute("URLTEST_MAPPINGS");
+        if (attr instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, ?> mappings = (Map<String, ?>) attr;
+            String key = UrlTestServlet.normalizePath(path);
+            if (mappings.containsKey(key)) {
+                RequestDispatcher rd = getServletContext().getNamedDispatcher("UrlTestServlet");
+                if (rd != null) {
+                    rd.forward(req, res);
+                    return;
+                }
+            }
+        }
 
         // Racine : chercher index
         if ("/".equals(path) || path.isEmpty()) {
@@ -40,7 +56,7 @@ public class FrontServlet extends HttpServlet {
         }
         
         // Non trouvé
-        showError(res, "Page non trouvee: " + path);
+        showError(res, "Page non trouvee: url " + path);
     }
 
     private String findIndex() {
