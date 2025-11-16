@@ -80,15 +80,35 @@ public class UrlTestServlet extends HttpServlet {
             return;
         }
 
-        resp.setContentType("text/html;charset=UTF-8");
-        try (PrintWriter out = resp.getWriter()) {
-            out.println("<html><body style='font-family:Arial;padding:24px'>");
-            out.println("<h2>UrlTestServlet</h2>");
-            out.println("<div>Requete: <code>" + escapeHtml(req.getRequestURI()) + "</code></div>");
-            out.println("<div>Path recherche: <code>" + escapeHtml(key) + "</code></div><hr/>");
-            out.println("<div>classe: " + escapeHtml(info.controllerClass.getSimpleName() + ".java") + "</div>");
-            out.println("<div>methode: " + escapeHtml(info.method.getName()) + "</div>");
-            out.println("</body></html>");
+        try {
+            Object controller = info.controllerClass.getDeclaredConstructor().newInstance();
+            Object result = info.method.invoke(controller);
+
+            if (result instanceof String) {
+                resp.setContentType("text/plain;charset=UTF-8");
+                try (PrintWriter out = resp.getWriter()) {
+                    out.print((String) result);
+                }
+            } else {
+                resp.setContentType("text/html;charset=UTF-8");
+                try (PrintWriter out = resp.getWriter()) {
+                    out.println("<html><body style='font-family:Arial;padding:24px'>");
+                    out.println("<h2>UrlTestServlet</h2>");
+                    out.println("<div>Requete: <code>" + escapeHtml(req.getRequestURI()) + "</code></div>");
+                    out.println("<div>Path recherche: <code>" + escapeHtml(key) + "</code></div><hr/>");
+                    out.println("<div>classe: " + escapeHtml(info.controllerClass.getSimpleName() + ".java") + "</div>");
+                    out.println("<div>methode: " + escapeHtml(info.method.getName()) + "</div>");
+                    out.println("</body></html>");
+                }
+            }
+        } catch (Exception e) {
+            resp.setContentType("text/html;charset=UTF-8");
+            try (PrintWriter out = resp.getWriter()) {
+                out.println("<html><body style='font-family:Arial;padding:24px'>");
+                out.println("<h2>Erreur lors de l'execution du controleur</h2>");
+                out.println("<pre>" + escapeHtml(e.toString()) + "</pre>");
+                out.println("</body></html>");
+            }
         }
     }
 
