@@ -1,15 +1,33 @@
 package com.framework;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.net.MalformedURLException;
 import java.util.*;
+
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
-import jakarta.servlet.RequestDispatcher;
+
+import com.utils.*;
+import com.classes.ModelView;
 
 public class FrontServlet extends HttpServlet {
+    private RequestDispatcher defaultDispatcher;
     private static final List<String> INDEX_FILES = Arrays.asList(
         "/index.html", "/index.htm", "/index.jsp"
     );
+
+    @Override
+    public void init() throws ServletException {
+        defaultDispatcher = getServletContext().getNamedDispatcher("default");
+        try {
+            // Adapter ici le package des contrôleurs à ton projet
+            Map<String, MappingHandler> urlMappings = ScanningUrl.scanUrlMappings("test.java");
+            getServletContext().setAttribute("urlMappings", urlMappings);
+        } catch (Exception e) {
+            throw new ServletException(e);
+        }
+    }
 
     @Override
     protected void service(HttpServletRequest req, HttpServletResponse res)
@@ -17,89 +35,91 @@ public class FrontServlet extends HttpServlet {
 
         String path = req.getRequestURI().substring(req.getContextPath().length());
 
-        // If UrlTestServlet has a mapping for this path, forward to it
-        Object attr = getServletContext().getAttribute("URLTEST_MAPPINGS");
-        if (attr instanceof Map) {
-            @SuppressWarnings("unchecked")
-            Map<String, ?> mappings = (Map<String, ?>) attr;
-            String key = UrlTestServlet.normalizePath(path);
-            if (mappings.containsKey(key)) {
-                RequestDispatcher rd = getServletContext().getNamedDispatcher("UrlTestServlet");
-                if (rd != null) {
-                    rd.forward(req, res);
-                    return;
-                }
-            }
-        }
+        @SuppressWarnings("unchecked")
+        Map<String, MappingHandler> urlMappings = (Map<String, MappingHandler>) getServletContext().getAttribute("urlMappings");
 
-        // Racine : chercher index
-        if ("/".equals(path) || path.isEmpty()) {
-            String index = findIndex();
-            if (index != null) {
-                serveResource(index, res);
+        if (path.equals("/") || path.isEmpty()) {
+            String indexPath = findExistingIndex();
+            if (indexPath != null) {
+                req.getRequestDispatcher(indexPath).forward(req, res);
+                return;
+            } else {
+                customServe(req, res);
                 return;
             }
-            showError(res, "Aucune page d'accueil trouvée");
-            return;
         }
 
-        // Bloquer WEB-INF
-        if (path.startsWith("/WEB-INF/")) {
-            res.sendError(403, "Accès interdit");
-            return;
+        MappingHandler mapH = urlMappings != null ? urlMappings.get(path) : null;
+
+        boolean resourceExists = getServletContext().getResource(path) != null;
+        if (resourceExists) {
+            defaultServe(req, res);
+        } else if (mapH != null) {
+            try {
+                handleMapping(req, res, mapH);
+            } catch (Exception e) {
+                throw new ServletException(e);
+            }
+        } else {
+            customServe(req, res);
         }
-        
-        // Servir la ressource si elle existe
-        if (getServletContext().getResourceAsStream(path) != null) {
-            serveResource(path, res);
-            return;
-        }
-        
-        // Non trouvé
-        showError(res, "Page non trouvee: url " + path);
     }
 
-    private String findIndex() {
+    private void handleMapping(HttpServletRequest req, HttpServletResponse res, MappingHandler mapH)
+        throws Exception {
+        Class<?> returnType = mapH.getMethode().getReturnType();
+        Object instance = mapH.getClasse().getDeclaredConstructor().newInstance();
+
+        if (returnType.equals(String.class)) {
+            Object result = mapH.getMethode().invoke(instance);
+            res.setContentType("text/plain;charset=UTF-8");
+            res.getWriter().println((String) result);
+        } else if (returnType.equals(ModelView.class)) {
+            Object mvM = mapH.getMethode().invoke(instance);
+            ModelView mv = (ModelView) mvM;
+            req.getRequestDispatcher(mv.getView()).forward(req, res);
+        } else {
+            res.setContentType("text/plain;charset=UTF-8");
+            res.getWriter().println("Le type de retour n'est pas un String ni un ModelView.");
+        }
+    }
+
+    private String findExistingIndex() {
         for (String index : INDEX_FILES) {
-            if (getServletContext().getResourceAsStream(index) != null) {
-                return index;
+            try {
+                if (getServletContext().getResource(index) != null) {
+                    return index;
+                }
+            } catch (MalformedURLException e) {
+                throw new RuntimeException("Invalid path in INDEX_FILES: " + index, e);
             }
         }
         return null;
     }
-    
-    private void serveResource(String path, HttpServletResponse res) throws IOException {
-        ServletContext ctx = getServletContext();
-        try (InputStream is = ctx.getResourceAsStream(path)) {
-            if (is == null) {
-                showError(res, "Resource not found: " + path);
-                return;
-            }
-            
-            // Déterminer le type de contenu
-            String contentType = ctx.getMimeType(path);
-            if (contentType != null) {
-                res.setContentType(contentType);
-            }
-            
-            // Copier les données
-            OutputStream os = res.getOutputStream();
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-            while ((bytesRead = is.read(buffer)) != -1) {
-                os.write(buffer, 0, bytesRead);
-            }
-            os.flush();
+
+    private void customServe(HttpServletRequest req, HttpServletResponse res) throws IOException {
+        res.setContentType("text/html;charset=UTF-8");
+        try (PrintWriter out = res.getWriter()) {
+            String uri = req.getRequestURI();
+            String responseBody = """
+                <html>
+                    <head><title>Resource Not Found</title></head>
+                    <body style=\"font-family:sans-serif;\">
+                        <p>Aucun fichier ni url correspondant n'a été trouvé.</p>
+                        <p>URL demandée : <strong>%s</strong></p>
+                    </body>
+                </html>
+                """.formatted(uri);
+            out.println(responseBody);
         }
     }
 
-    private void showError(HttpServletResponse res, String message) throws IOException {
-        res.setContentType("text/html;charset=UTF-8");
-        res.setStatus(404);
-        PrintWriter out = res.getWriter();
-        out.println("<html><body style='font-family:Arial;padding:40px;text-align:center'>");
-        out.println("<h1>Erreur</h1><p>" + message + "</p>");
-        out.println("</body></html>");
-        out.close();
+    private void defaultServe(HttpServletRequest req, HttpServletResponse res)
+            throws ServletException, IOException {
+        if (defaultDispatcher != null) {
+            defaultDispatcher.forward(req, res);
+        } else {
+            customServe(req, res);
+        }
     }
 }
