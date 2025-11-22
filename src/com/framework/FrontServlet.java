@@ -2,13 +2,17 @@ package com.framework;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.net.MalformedURLException;
 import java.util.*;
 
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 
+import com.annotations.Param;
 import com.utils.*;
+import com.utils.ParametersHandler;
 import com.classes.ModelView;
 
 public class FrontServlet extends HttpServlet {
@@ -75,15 +79,18 @@ public class FrontServlet extends HttpServlet {
     // Exécute la méthode de contrôleur associée à l'URL et gère son type de retour
     private void handleMapping(HttpServletRequest req, HttpServletResponse res, MappingHandler mapH)
         throws Exception {
-        Class<?> returnType = mapH.getMethode().getReturnType();
+        Method method = mapH.getMethode();
+        Class<?> returnType = method.getReturnType();
         Object instance = mapH.getClasse().getDeclaredConstructor().newInstance();
 
+        Object[] preparedParams = prepareMethodParameters(req, method);
+
         if (returnType.equals(String.class)) {
-            Object result = mapH.getMethode().invoke(instance);
+            Object result = method.invoke(instance, preparedParams);
             res.setContentType("text/plain;charset=UTF-8");
             res.getWriter().println((String) result);
         } else if (returnType.equals(ModelView.class)) {
-            Object mvM = mapH.getMethode().invoke(instance);
+            Object mvM = method.invoke(instance, preparedParams);
             ModelView mv = (ModelView) mvM;
             if (mv.getData() != null) {
                 for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
@@ -142,11 +149,7 @@ public class FrontServlet extends HttpServlet {
     // Cherche un mapping dont le pattern d'URL correspond au chemin demandé et extrait les paramètres
     private MappingHandler findMatchingPattern(String path, Map<String, MappingHandler> urlMappings, HttpServletRequest req) {
         for (MappingHandler handler : urlMappings.values()) {
-            if (handler.getUrlPattern() != null) {
-                System.out.println("[DEBUG] Test pattern " + handler.getUrlPattern().getOriginalPattern() + " pour path " + path);
-            }
             if (handler.getUrlPattern() != null && handler.getUrlPattern().matches(path)) {
-                System.out.println("[DEBUG] MATCH pattern " + handler.getUrlPattern().getOriginalPattern() + " pour path " + path);
                 Map<String, String> params = handler.getUrlPattern().extractParams(path);
                 for (Map.Entry<String, String> entry : params.entrySet()) {
                     req.setAttribute(entry.getKey(), entry.getValue());
@@ -155,5 +158,36 @@ public class FrontServlet extends HttpServlet {
             }
         }
         return null;
+    }
+
+    // Prépare les paramètres de la méthode de contrôleur à partir de la requête HTTP
+    private Object[] prepareMethodParameters(HttpServletRequest req, Method method) {
+        Parameter[] parameters = method.getParameters();
+        Object[] paramValues = new Object[parameters.length];
+
+        for (int i = 0; i < parameters.length; i++) {
+            Parameter param = parameters[i];
+            String paramName;
+
+            if (param.isAnnotationPresent(Param.class)) {
+                Param ann = param.getAnnotation(Param.class);
+                paramName = ann.value();
+            } else {
+                paramName = param.getName();
+            }
+
+            String value = req.getParameter(paramName);
+
+            if (value == null) {
+                Object attr = req.getAttribute(paramName);
+                if (attr != null) {
+                    value = attr.toString();
+                }
+            }
+
+            paramValues[i] = ParametersHandler.convertToType(value, param.getType());
+        }
+
+        return paramValues;
     }
 }
