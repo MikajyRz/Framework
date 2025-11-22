@@ -17,6 +17,7 @@ public class FrontServlet extends HttpServlet {
         "/index.html", "/index.htm", "/index.jsp"
     );
 
+    // Initialisation du servlet frontal : scan des contrôleurs et enregistrement des mappings
     @Override
     public void init() throws ServletException {
         defaultDispatcher = getServletContext().getNamedDispatcher("default");
@@ -29,6 +30,7 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
+    // Méthode centrale qui intercepte toutes les requêtes HTTP et décide du traitement
     @Override
     protected void service(HttpServletRequest req, HttpServletResponse res)
             throws ServletException, IOException {
@@ -65,6 +67,7 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
+    // Exécute la méthode de contrôleur associée à l'URL et gère son type de retour
     private void handleMapping(HttpServletRequest req, HttpServletResponse res, MappingHandler mapH)
         throws Exception {
         Class<?> returnType = mapH.getMethode().getReturnType();
@@ -77,6 +80,11 @@ public class FrontServlet extends HttpServlet {
         } else if (returnType.equals(ModelView.class)) {
             Object mvM = mapH.getMethode().invoke(instance);
             ModelView mv = (ModelView) mvM;
+            if (mv.getData() != null) {
+                for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
+                    req.setAttribute(entry.getKey(), entry.getValue());
+                }
+            }
             req.getRequestDispatcher(mv.getView()).forward(req, res);
         } else {
             res.setContentType("text/plain;charset=UTF-8");
@@ -84,6 +92,7 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
+    // Recherche un fichier index par défaut (index.html / index.jsp, ...)
     private String findExistingIndex() {
         for (String index : INDEX_FILES) {
             try {
@@ -97,6 +106,7 @@ public class FrontServlet extends HttpServlet {
         return null;
     }
 
+    // Réponse HTML personnalisée lorsqu'aucune ressource ni mapping n'est trouvée
     private void customServe(HttpServletRequest req, HttpServletResponse res) throws IOException {
         res.setContentType("text/html;charset=UTF-8");
         try (PrintWriter out = res.getWriter()) {
@@ -114,6 +124,7 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
+    // Délègue le traitement au servlet par défaut du conteneur (fichiers statiques, JSP...)
     private void defaultServe(HttpServletRequest req, HttpServletResponse res)
             throws ServletException, IOException {
         if (defaultDispatcher != null) {

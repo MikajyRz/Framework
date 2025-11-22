@@ -13,6 +13,7 @@ import com.annotations.ControllerAnnotation;
 import com.annotations.HandleUrl;
 
 public class ScanningUrl {
+    // Charge dynamiquement toutes les classes d'un package donné
     public static List<Class<?>> getClasses(String packageName) throws IOException, ClassNotFoundException {
         String path = packageName.replace('.', '/');
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
@@ -23,6 +24,7 @@ public class ScanningUrl {
         return findClasses(directory, packageName);
     }
 
+    // Parcourt récursivement un répertoire pour trouver toutes les classes d'un package
     private static List<Class<?>> findClasses(File directory, String packageName) throws ClassNotFoundException {
         List<Class<?>> classes = new ArrayList<>();
         if (!directory.exists()) return classes;
@@ -41,6 +43,7 @@ public class ScanningUrl {
         return classes;
     }
 
+    // Scanne les contrôleurs annotés et construit la map URL -> MappingHandler
     public static Map<String, MappingHandler> scanUrlMappings(String packageName) throws Exception {
         Map<String, MappingHandler> urlMappings = new HashMap<>();
         List<Class<?>> controllers = getClasses(packageName);
