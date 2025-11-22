@@ -105,7 +105,7 @@ public class FrontServlet extends HttpServlet {
                 <html>
                     <head><title>Resource Not Found</title></head>
                     <body style=\"font-family:sans-serif;\">
-                        <p>Aucun fichier ni url correspondant n'a été trouvé.</p>
+                        <p>Aucun fichier ni url correspondant n'a ete trouve.</p>
                         <p>URL demandée : <strong>%s</strong></p>
                     </body>
                 </html>
