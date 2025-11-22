@@ -52,7 +52,16 @@ public class ScanningUrl {
                 for (Method method : clazz.getDeclaredMethods()) {
                     if (method.isAnnotationPresent(HandleUrl.class)) {
                         String url = method.getAnnotation(HandleUrl.class).value();
-                        urlMappings.put(url, new MappingHandler(clazz, method));
+                        if (url == null) url = "";
+                        if (!url.isEmpty() && !url.startsWith("/")) {
+                            url = "/" + url;
+                        }
+                        if (url.isEmpty()) {
+                            url = "/";
+                        }
+
+                        // Utilise directement la valeur de @HandleUrl comme clé et comme pattern
+                        urlMappings.put(url, new MappingHandler(clazz, method, new UrlPattern(url)));
                     }
                 }
             }

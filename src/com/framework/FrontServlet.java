@@ -53,6 +53,11 @@ public class FrontServlet extends HttpServlet {
 
         MappingHandler mapH = urlMappings != null ? urlMappings.get(path) : null;
 
+        // Si aucun mapping exact n'est trouvé, on essaie de faire correspondre un pattern d'URL (ex: /user/{id})
+        if (mapH == null && urlMappings != null) {
+            mapH = findMatchingPattern(path, urlMappings, req);
+        }
+
         boolean resourceExists = getServletContext().getResource(path) != null;
         if (resourceExists) {
             defaultServe(req, res);
@@ -132,5 +137,23 @@ public class FrontServlet extends HttpServlet {
         } else {
             customServe(req, res);
         }
+    }
+
+    // Cherche un mapping dont le pattern d'URL correspond au chemin demandé et extrait les paramètres
+    private MappingHandler findMatchingPattern(String path, Map<String, MappingHandler> urlMappings, HttpServletRequest req) {
+        for (MappingHandler handler : urlMappings.values()) {
+            if (handler.getUrlPattern() != null) {
+                System.out.println("[DEBUG] Test pattern " + handler.getUrlPattern().getOriginalPattern() + " pour path " + path);
+            }
+            if (handler.getUrlPattern() != null && handler.getUrlPattern().matches(path)) {
+                System.out.println("[DEBUG] MATCH pattern " + handler.getUrlPattern().getOriginalPattern() + " pour path " + path);
+                Map<String, String> params = handler.getUrlPattern().extractParams(path);
+                for (Map.Entry<String, String> entry : params.entrySet()) {
+                    req.setAttribute(entry.getKey(), entry.getValue());
+                }
+                return handler;
+            }
+        }
+        return null;
     }
 }
